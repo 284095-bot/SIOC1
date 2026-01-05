@@ -1,13 +1,77 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import convolve
+from scipy.signal import convolve, convolve2d
 from PIL import Image
 import urllib.request
 from io import BytesIO
 
-# --- KONFIGURACJA ---
-# Zmieniono na 15, zeby bylo widac "kanciastosc" interpolacji
-N_POINTS = 15
+X_MIN, X_MAX = -np.pi, np.pi
+N_SAMPLES = 100
+
+functions = {
+    "sin(x)": lambda x: np.sin(x),
+    "sin(1/x)": lambda x: np.sin(1 / (x + 1e-6)),
+    "sign(sin(8x))": lambda x: np.sign(np.sin(8 * x))
+}
+
+kernels_task1 = {
+    "triangle": lambda t: np.clip(1 - np.abs(t), 0, None),
+    "sinc": np.sinc,
+    "cubic": lambda t: np.where(
+        np.abs(t) <= 1, 1.5 * np.abs(t)**3 - 2.5 * np.abs(t)**2 + 1,
+        np.where((np.abs(t) <= 2), -0.5 * np.abs(t)**3 + 2.5 * np.abs(t)**2 - 4 * np.abs(t) + 2, 0)
+    )
+}
+
+def interpolate_signal(Y, x_nodes, h, d):
+    def interp_func(t_targets):
+        diff = (t_targets[None, :] - x_nodes[:, None]) / d
+        vals = h(diff).astype(float)
+        weights = np.sum(vals, axis=0)
+        weights[weights == 0] = 1.0
+        return np.sum(Y[:, None] * vals, axis=0) / weights
+    return interp_func
+
+def mse_criterion(f_true, f_interp, x_vals):
+    return np.mean((f_true(x_vals) - f_interp(x_vals)) ** 2)
+
+def run_functions():
+    x = np.linspace(X_MIN, X_MAX, N_SAMPLES)
+    d = (X_MAX - X_MIN) / (N_SAMPLES - 1)
+    
+    fig, axs = plt.subplots(3, 3, figsize=(16, 10))
+    fig.suptitle("Zadanie 1: Interpolacja 3 funkcji x 3 jadra (skala 10x)", fontsize=16)
+    
+    row_idx = 0
+    for f_name, f in functions.items():
+        Y = f(x)
+        col_idx = 0
+        for h_name, h in kernels_task1.items():
+            scale = 10
+            x_gen = np.linspace(X_MIN, X_MAX, N_SAMPLES * scale)
+            
+            interp = interpolate_signal(Y, x, h, d)
+            y_gen = interp(x_gen)
+            
+            mse = mse_criterion(f, interp, x_gen)
+            
+            ax = axs[row_idx, col_idx]
+            
+            x_fine = np.linspace(X_MIN, X_MAX, N_SAMPLES * 20)
+            ax.plot(x_fine, f(x_fine), 'k--', alpha=0.3, label='Oryginal')
+            ax.scatter(x, Y, color='black', s=10, label='Wezly')
+            ax.plot(x_gen, y_gen, 'r-', linewidth=1.5, label='Interp')
+            
+            ax.set_title(f"{f_name} + {h_name}\nMSE: {mse:.5f}", fontsize=10)
+            if row_idx == 0 and col_idx == 0:
+                ax.legend(loc='upper right', fontsize=8)
+            ax.grid(True, alpha=0.3)
+            
+            col_idx += 1
+        row_idx += 1
+        
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
 
 def get_kernel(name, scale):
     num_points = 10 * scale + 1
@@ -33,47 +97,8 @@ def simple_interpolate_1d(signal, scale, kernel_name='tri'):
     result = convolve(upsampled, kernel, mode='same')
     return result * scale
 
-def f1(x): return np.sin(x)
-def f2(x): 
-    with np.errstate(divide='ignore', invalid='ignore'):
-        val = np.sin(1/x)
-        val = np.nan_to_num(val)
-    return val
-def f3(x): return np.sign(np.sin(8*x))
-
-def run_functions():
-    x_start = np.linspace(-np.pi, np.pi, N_POINTS)
-    
-    functions = [
-        ("sin(x)", f1, 'sinc'), 
-        ("sin(1/x)", f2, 'tri'), 
-        ("sgn(sin(8x))", f3, 'rect')
-    ]
-    
-    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-    
-    for i, (name, func, k_name) in enumerate(functions):
-        y_samples = func(x_start)
-        
-        scale = 10  # Zwiekszamy skale zeby linia byla gladsza miedzy rzadkimi punktami
-        y_interp = simple_interpolate_1d(y_samples, scale, k_name)
-        x_interp = np.linspace(-np.pi, np.pi, len(y_interp))
-        
-        y_true = func(x_interp)
-
-        axs[i].plot(x_interp, y_true, color='green', linestyle='--', alpha=0.4, label='Wzorzec')
-        axs[i].plot(x_interp, y_interp, color='blue', linewidth=2, label='Interpolacja')
-        
-        axs[i].set_title(f"{name}\n(Jadro: {k_name})")
-        axs[i].legend()
-        axs[i].grid(True, alpha=0.3)
-        
-    plt.tight_layout()
-    plt.show()
-
 def scale_down_avg(image, factor):
     kernel = np.ones((factor, factor)) / (factor**2)
-    from scipy.signal import convolve2d
     blurred = convolve2d(image, kernel, mode='same')
     return blurred[::factor, ::factor]
 
@@ -98,6 +123,7 @@ def run_image_scaling(url):
         final[:, c] = simple_interpolate_1d(temp[:, c], SCALE, 'tri')[:h*SCALE]
         
     plt.figure(figsize=(12, 6))
+    plt.suptitle("Zadanie 2: Skalowanie obrazu", fontsize=16)
     plt.subplot(1, 3, 1); plt.imshow(img, cmap='gray'); plt.title("Oryginal"); plt.axis('off')
     plt.subplot(1, 3, 2); plt.imshow(small, cmap='gray'); plt.title(f"Zmniejszony x{SCALE}"); plt.axis('off')
     plt.subplot(1, 3, 3); plt.imshow(final, cmap='gray'); plt.title(f"Powiekszony x{SCALE}"); plt.axis('off')
