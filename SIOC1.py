@@ -39,11 +39,10 @@ def run_functions():
     x = np.linspace(X_MIN, X_MAX, N_SAMPLES)
     d = (X_MAX - X_MIN) / (N_SAMPLES - 1)
     
-    fig, axs = plt.subplots(3, 3, figsize=(16, 10))
-    fig.suptitle("Zadanie 1: Interpolacja 3 funkcji x 3 jadra (skala 10x)", fontsize=16)
-    
-    row_idx = 0
     for f_name, f in functions.items():
+        fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+        fig.suptitle(f"Zadanie 1: Funkcja {f_name}", fontsize=16)
+        
         Y = f(x)
         col_idx = 0
         for h_name, h in kernels_task1.items():
@@ -55,22 +54,22 @@ def run_functions():
             
             mse = mse_criterion(f, interp, x_gen)
             
-            ax = axs[row_idx, col_idx]
+            ax = axs[col_idx]
             
             x_fine = np.linspace(X_MIN, X_MAX, N_SAMPLES * 20)
             ax.plot(x_fine, f(x_fine), 'k--', alpha=0.3, label='Oryginal')
             ax.scatter(x, Y, color='black', s=10, label='Wezly')
             ax.plot(x_gen, y_gen, 'r-', linewidth=1.5, label='Interp')
             
-            ax.set_title(f"{f_name} + {h_name}\nMSE: {mse:.5f}", fontsize=10)
-            if row_idx == 0 and col_idx == 0:
+            ax.set_title(f"Jadro: {h_name}\nMSE: {mse:.5f}", fontsize=10)
+            if col_idx == 0:
                 ax.legend(loc='upper right', fontsize=8)
             ax.grid(True, alpha=0.3)
             
             col_idx += 1
-        row_idx += 1
         
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        
     plt.show()
 
 def get_kernel(name, scale):
