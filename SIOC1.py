@@ -126,9 +126,9 @@ def run_image_scaling(url):
     mse_img = np.mean((img_crop - final_crop) ** 2)
         
     plt.figure(figsize=(12, 6))
-    plt.suptitle("Zadanie 2: Skalowanie obrazu", fontsize=16)
+    plt.suptitle("Skalowanie obrazu", fontsize=16)
     plt.subplot(1, 3, 1); plt.imshow(img, cmap='gray'); plt.title("Oryginal"); plt.axis('off')
-    plt.subplot(1, 3, 2); plt.imshow(small, cmap='gray'); plt.title(f"Zmniejszony x{SCALE}\n{small.shape}"); plt.axis('off')
+    plt.subplot(1, 3, 2); plt.imshow(small, cmap='gray'); plt.title(f"Zmniejszony x{SCALE}"); plt.axis('off')
     
     plt.subplot(1, 3, 3); plt.imshow(final, cmap='gray'); plt.title(f"Powiekszony x{SCALE}\nMSE: {mse_img:.2f}"); plt.axis('off')
     
