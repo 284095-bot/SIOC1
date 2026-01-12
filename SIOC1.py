@@ -41,7 +41,7 @@ def run_functions():
     
     for f_name, f in functions.items():
         fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-        fig.suptitle(f"Zadanie 1: Funkcja {f_name}", fontsize=16)
+        fig.suptitle(f"Funkcja {f_name}", fontsize=16)
         
         Y = f(x)
         col_idx = 0
@@ -55,7 +55,6 @@ def run_functions():
             mse = mse_criterion(f, interp, x_gen)
             
             ax = axs[col_idx]
-            
             x_fine = np.linspace(X_MIN, X_MAX, N_SAMPLES * 20)
             ax.plot(x_fine, f(x_fine), 'k--', alpha=0.3, label='Oryginal')
             ax.scatter(x, Y, color='black', s=10, label='Wezly')
@@ -107,6 +106,7 @@ def run_image_scaling(url):
             img_data = response.read()
         img = np.array(Image.open(BytesIO(img_data)).convert('RGBA').convert('L'))
     except Exception:
+        print("Nie udalo sie pobrac obrazu")
         return
 
     SCALE = 2
@@ -120,12 +120,22 @@ def run_image_scaling(url):
     final = np.zeros((h * SCALE, w * SCALE))
     for c in range(w * SCALE):
         final[:, c] = simple_interpolate_1d(temp[:, c], SCALE, 'tri')[:h*SCALE]
+
+    min_h = min(img.shape[0], final.shape[0])
+    min_w = min(img.shape[1], final.shape[1])
+    
+    img_crop = img[:min_h, :min_w]
+    final_crop = final[:min_h, :min_w]
+    
+    mse_img = np.mean((img_crop - final_crop) ** 2)
         
     plt.figure(figsize=(12, 6))
-    plt.suptitle("Zadanie 2: Skalowanie obrazu", fontsize=16)
+    plt.suptitle("Skalowanie obrazu", fontsize=16)
     plt.subplot(1, 3, 1); plt.imshow(img, cmap='gray'); plt.title("Oryginal"); plt.axis('off')
     plt.subplot(1, 3, 2); plt.imshow(small, cmap='gray'); plt.title(f"Zmniejszony x{SCALE}"); plt.axis('off')
-    plt.subplot(1, 3, 3); plt.imshow(final, cmap='gray'); plt.title(f"Powiekszony x{SCALE}"); plt.axis('off')
+    
+    plt.subplot(1, 3, 3); plt.imshow(final, cmap='gray'); plt.title(f"Powiekszony x{SCALE}\nMSE: {mse_img:.2f}"); plt.axis('off')
+    
     plt.tight_layout()
     plt.show()
 
