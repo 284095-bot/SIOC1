@@ -1,37 +1,81 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.signal import convolve, convolve2d
 from PIL import Image
 import urllib.request
 from io import BytesIO
 
-def manual_convolve1d(signal, kernel):
-    sig_len = len(signal)
-    ker_len = len(kernel)
-    res = np.zeros(sig_len)
-    pad = ker_len // 2
-    padded = np.pad(signal, pad, mode='edge')
-    for i in range(sig_len):
-        res[i] = np.sum(padded[i:i+ker_len] * kernel[::-1])
-    return res
+X_MIN, X_MAX = -np.pi, np.pi
+N_SAMPLES = 100
 
-def manual_convolve2d(image, kernel):
-    h, w = image.shape
-    kh, kw = kernel.shape
-    res = np.zeros_like(image)
-    ph, pw = kh // 2, kw // 2
-    padded = np.pad(image, ((ph, ph), (pw, pw)), mode='edge')
-    for i in range(h):
-        for j in range(w):
-            region = padded[i:i+kh, j:j+kw]
-            res[i, j] = np.sum(region * kernel)
-    return res
+functions = {
+    "sin(x)": lambda x: np.sin(x),
+    "sin(1/x)": lambda x: np.sin(1 / (x + 1e-6)),
+    "sign(sin(8x))": lambda x: np.sign(np.sin(8 * x))
+}
+
+kernels_task1 = {
+    "triangle": lambda t: np.clip(1 - np.abs(t), 0, None),
+    "sinc": np.sinc,
+    "cubic": lambda t: np.where(
+        np.abs(t) <= 1, 1.5 * np.abs(t)**3 - 2.5 * np.abs(t)**2 + 1,
+        np.where((np.abs(t) <= 2), -0.5 * np.abs(t)**3 + 2.5 * np.abs(t)**2 - 4 * np.abs(t) + 2, 0)
+    )
+}
+
+def interpolate_signal(Y, x_nodes, h, d):
+    def interp_func(t_targets):
+        t_targets = np.atleast_1d(t_targets)
+        diff = (t_targets[None, :] - x_nodes[:, None]) / d
+        vals = h(diff).astype(float)
+        weights = np.sum(vals, axis=0)
+        weights[weights == 0] = 1.0
+        return np.sum(Y[:, None] * vals, axis=0) / weights
+    return interp_func
+
+def mse_criterion(f_true, f_interp, x_vals):
+    return np.mean((f_true(x_vals) - f_interp(x_vals)) ** 2)
+
+def run_functions():
+    x = np.linspace(X_MIN, X_MAX, N_SAMPLES)
+    d = (X_MAX - X_MIN) / (N_SAMPLES - 1)
+    
+    for scale in [2, 4, 10]:
+        for f_name, f in functions.items():
+            fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+            fig.suptitle(f"{f_name} - Skala x{scale}", fontsize=16)
+            
+            Y = f(x)
+            col_idx = 0
+            for h_name, h in kernels_task1.items():
+                x_gen = np.linspace(X_MIN, X_MAX, N_SAMPLES * scale)
+                
+                interp = interpolate_signal(Y, x, h, d)
+                y_gen = interp(x_gen)
+                
+                mse = mse_criterion(f, interp, x_gen)
+                
+                ax = axs[col_idx]
+                x_fine = np.linspace(X_MIN, X_MAX, N_SAMPLES * 20)
+                ax.plot(x_fine, f(x_fine), 'k--', alpha=0.3)
+                ax.scatter(x, Y, color='black', s=10)
+                ax.plot(x_gen, y_gen, 'r-', linewidth=1.5)
+                
+                ax.set_title(f"Jadro: {h_name}\nMSE: {mse:.5e}", fontsize=10)
+                ax.grid(True, alpha=0.3)
+                col_idx += 1
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
 
 def get_kernel(name, scale):
-    size = 2 * scale + 1
-    t = np.linspace(-2, 2, size)
-    if name == 'triangle':
-        k = 1 - np.abs(t)
-    elif name == 'sinc':
+    num_points = 10 * scale + 1
+    t = np.linspace(-5, 5, num_points)
+    
+    if name == 'rect': 
+        k = np.where(np.abs(t) <= 0.5, 1.0, 0.0)
+    elif name == 'tri': 
+        k = np.clip(1 - np.abs(t), 0, None)
+    elif name == 'sinc': 
         k = np.sinc(t)
     elif name == 'cubic':
         a = -0.5
@@ -39,62 +83,59 @@ def get_kernel(name, scale):
         k = np.where(abs_t < 1, (a+2)*abs_t**3 - (a+3)*abs_t**2 + 1,
             np.where(abs_t < 2, a*abs_t**3 - 5*a*abs_t**2 + 8*a*abs_t - 4*a, 0))
     else:
-        k = np.ones(size)
-    k[k < -1] = -1 
+        k = np.ones(num_points)
+    
     return k / np.sum(k)
 
-def interpolate_1d(signal, scale, kernel_name='triangle'):
-    new_len = len(signal) * scale
-    upsampled = np.zeros(new_len)
+def simple_interpolate_1d(signal, scale, kernel_name='cubic'):
+    upsampled = np.zeros(len(signal) * scale)
     upsampled[::scale] = signal
     kernel = get_kernel(kernel_name, scale)
-    return manual_convolve1d(upsampled, kernel) * scale
+    result = convolve(upsampled, kernel, mode='same')
+    return result * scale
 
-def calculate_mse(y, y_hat):
-    return np.mean((y - y_hat)**2)
+def scale_down_avg(image, factor):
+    kernel = np.ones((factor, factor)) / (factor**2)
+    blurred = convolve2d(image, kernel, mode='same')
+    return blurred[::factor, ::factor]
 
-functions = {
-    "sin(x)": lambda x: np.sin(x),
-    "sin(1/x)": lambda x: np.sin(1/(x + 1e-6)),
-    "sign(sin(8x))": lambda x: np.sign(np.sin(8*x))
-}
+def run_image_scaling(url):
+    with urllib.request.urlopen(url) as response:
+        img_data = response.read()
+    
+    img_raw = Image.open(BytesIO(img_data))
+    if img_raw.mode == 'P':
+        img_raw = img_raw.convert('RGBA')
+    img = np.array(img_raw.convert('L'))
 
-kernels = ['triangle', 'sinc', 'cubic']
-x_nodes = np.linspace(-np.pi, np.pi, 100)
-x_fine = np.linspace(-np.pi, np.pi, 1000)
+    SCALE = 2
+    small = scale_down_avg(img, SCALE)
+    h, w = small.shape
+    
+    temp = np.zeros((h, w * SCALE))
+    for r in range(h):
+        temp[r, :] = simple_interpolate_1d(small[r, :], SCALE, 'cubic')[:w*SCALE]
+        
+    final = np.zeros((h * SCALE, w * SCALE))
+    for c in range(w * SCALE):
+        final[:, c] = simple_interpolate_1d(temp[:, c], SCALE, 'cubic')[:h*SCALE]
 
-for f_name, f in functions.items():
-    fig, axs = plt.subplots(1, 3, figsize=(15, 4))
-    fig.suptitle(f"Funkcja {f_name}")
-    y_nodes = f(x_nodes)
-    y_true = f(x_fine)
-    for i, k_name in enumerate(kernels):
-        y_interp = interpolate_1d(y_nodes, 10, k_name)
-        mse = calculate_mse(y_true, y_interp)
-        axs[i].plot(x_fine, y_true, 'k--', alpha=0.3, label='Oryginał')
-        axs[i].plot(x_fine, y_interp, 'r', label='Interp')
-        axs[i].scatter(x_nodes, y_nodes, c='k', s=5, label='Węzły')
-        axs[i].set_title(f"jadro: {k_name}\nMSE: {mse:.5f}")
+    min_h = min(img.shape[0], final.shape[0])
+    min_w = min(img.shape[1], final.shape[1])
+    
+    img_crop = img[:min_h, :min_w].astype(float)
+    final_crop = final[:min_h, :min_w].astype(float)
+    
+    mse_img = np.mean((img_crop - final_crop) ** 2)
+        
+    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 3, 1); plt.imshow(img, cmap='gray'); plt.title("Oryginal"); plt.axis('off')
+    plt.subplot(1, 3, 2); plt.imshow(small, cmap='gray'); plt.title(f"Zmniejszony x{SCALE}"); plt.axis('off')
+    plt.subplot(1, 3, 3); plt.imshow(final_crop, cmap='gray'); plt.title(f"Powiekszony x{SCALE}\nMSE: {mse_img:.2f}"); plt.axis('off')
+    
     plt.tight_layout()
+    plt.show()
 
-url = "https://raw.githubusercontent.com/284095-bot/SIOC1/main/Chess.png"
-with urllib.request.urlopen(url) as response:
-    img_orig = np.array(Image.open(BytesIO(response.read())).convert('L'))
-
-img_small = manual_convolve2d(img_orig.astype(float), np.ones((2,2))/4)[::2, ::2]
-
-h, w = img_small.shape
-temp = np.zeros((h, w * 2))
-for r in range(h):
-    temp[r, :] = interpolate_1d(img_small[r, :], 2, 'triangle')
-final = np.zeros((h * 2, w * 2))
-for c in range(w * 2):
-    final[:, c] = interpolate_1d(temp[:, c], 2, 'triangle')
-
-mse_img = calculate_mse(img_orig.astype(float), final)
-fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-axs[0].imshow(img_orig, cmap='gray'); axs[0].set_title("Oryginal")
-axs[1].imshow(img_small, cmap='gray'); axs[1].set_title("Zmniejszony x2")
-axs[2].imshow(final, cmap='gray'); axs[2].set_title(f"Powiekszony x2\nMSE: {mse_img:.2f}")
-plt.show()
-
+if __name__ == "__main__":
+    run_functions()
+    run_image_scaling("https://raw.githubusercontent.com/284095-bot/SIOC1/main/Chess.png")
