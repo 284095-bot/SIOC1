@@ -40,7 +40,7 @@ def get_kernel(name, scale):
             np.where(abs_t < 2, a*abs_t**3 - 5*a*abs_t**2 + 8*a*abs_t - 4*a, 0))
     else:
         k = np.ones(size)
-    k[k < -1] = -1 # Clipping dla stabilności wizualnej
+    k[k < -1] = -1 
     return k / np.sum(k)
 
 def interpolate_1d(signal, scale, kernel_name='triangle'):
@@ -97,3 +97,4 @@ axs[0].imshow(img_orig, cmap='gray'); axs[0].set_title("Oryginal")
 axs[1].imshow(img_small, cmap='gray'); axs[1].set_title("Zmniejszony x2")
 axs[2].imshow(final, cmap='gray'); axs[2].set_title(f"Powiekszony x2\nMSE: {mse_img:.2f}")
 plt.show()
+
